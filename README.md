@@ -9,3 +9,10 @@ Create Ecommerce Restful API course
 6 - Run `php artisan db:seed`;
 7 - Run `php artisan serve`;
 8 - Go to your browser at `http://localhost:8000`;
+
+
+===================
+
+UIRs
+
+1 - List all products: `http://localhost:8000/api/products`;
