@@ -191,6 +191,10 @@ final class File
      */
     private static function encryptFileInternal($inputFilename, $outputFilename, KeyOrPassword $secret)
     {
+        if (file_exists($inputFilename) && file_exists($outputFilename) && realpath($inputFilename) === realpath($outputFilename)) {
+            throw new Ex\IOException('Input and output filenames must be different.');
+        }
+
         /* Open the input file. */
         $if = @\fopen($inputFilename, 'rb');
         if ($if === false) {
@@ -256,6 +260,10 @@ final class File
      */
     private static function decryptFileInternal($inputFilename, $outputFilename, KeyOrPassword $secret)
     {
+        if (file_exists($inputFilename) && file_exists($outputFilename) && realpath($inputFilename) === realpath($outputFilename)) {
+            throw new Ex\IOException('Input and output filenames must be different.');
+        }
+
         /* Open the input file. */
         $if = @\fopen($inputFilename, 'rb');
         if ($if === false) {
@@ -320,6 +328,9 @@ final class File
      *
      * @throws Ex\EnvironmentIsBrokenException
      * @throws Ex\IOException
+     * @psalm-suppress PossiblyInvalidArgument
+     *      Fixes erroneous errors caused by PHP 7.2 switching the return value
+     *      of hash_init from a resource to a HashContext.
      */
     private static function encryptResourceInternal($inputHandle, $outputHandle, KeyOrPassword $secret)
     {
@@ -346,13 +357,12 @@ final class File
         $iv     = Core::secureRandom($ivsize);
 
         /* Initialize a streaming HMAC state. */
-        /** @var resource $hmac */
+        /** @var mixed $hmac */
         $hmac = \hash_init(Core::HASH_FUNCTION_NAME, HASH_HMAC, $akey);
-        if (!\is_resource($hmac)) {
-            throw new Ex\EnvironmentIsBrokenException(
-                'Cannot initialize a hash context'
-            );
-        }
+        Core::ensureTrue(
+            \is_resource($hmac) || \is_object($hmac),
+            'Cannot initialize a hash context'
+        );
 
         /* Write the header, salt, and IV. */
         self::writeBytes(
@@ -370,6 +380,9 @@ final class File
         $thisIv = $iv;
 
         /* How many blocks do we encrypt at a time? We increment by this value. */
+        /**
+         * @psalm-suppress RedundantCast
+         */
         $inc = (int) (Core::BUFFER_BYTE_SIZE / Core::BLOCK_BYTE_SIZE);
 
         /* Loop until we reach the end of the input file. */
@@ -407,11 +420,7 @@ final class File
                 $thisIv
             );
 
-            if (!\is_string($encrypted)) {
-                throw new Ex\EnvironmentIsBrokenException(
-                    'OpenSSL encryption error'
-                );
-            }
+            Core::ensureTrue(\is_string($encrypted), 'OpenSSL encryption error');
 
             /* Write this buffer's ciphertext. */
             self::writeBytes($outputHandle, $encrypted, Core::ourStrlen($encrypted));
@@ -441,6 +450,9 @@ final class File
      * @throws Ex\EnvironmentIsBrokenException
      * @throws Ex\IOException
      * @throws Ex\WrongKeyOrModifiedCiphertextException
+     * @psalm-suppress PossiblyInvalidArgument
+     *      Fixes erroneous errors caused by PHP 7.2 switching the return value
+     *      of hash_init from a resource to a HashContext.
      */
     public static function decryptResourceInternal($inputHandle, $outputHandle, KeyOrPassword $secret)
     {
@@ -491,10 +503,13 @@ final class File
         $thisIv = $iv;
 
         /* How many blocks do we encrypt at a time? We increment by this value. */
+        /**
+         * @psalm-suppress RedundantCast
+         */
         $inc = (int) (Core::BUFFER_BYTE_SIZE / Core::BLOCK_BYTE_SIZE);
 
         /* Get the HMAC. */
-        if (\fseek($inputHandle, (-1 * Core::MAC_BYTE_SIZE), SEEK_END) === false) {
+        if (\fseek($inputHandle, (-1 * Core::MAC_BYTE_SIZE), SEEK_END) === -1) {
             throw new Ex\IOException(
                 'Cannot seek to beginning of MAC within input file'
             );
@@ -516,23 +531,19 @@ final class File
         $stored_mac = self::readBytes($inputHandle, Core::MAC_BYTE_SIZE);
 
         /* Initialize a streaming HMAC state. */
-        /** @var resource $hmac */
+        /** @var mixed $hmac */
         $hmac = \hash_init(Core::HASH_FUNCTION_NAME, HASH_HMAC, $akey);
-        if (!\is_resource($hmac)) {
-            throw new Ex\EnvironmentIsBrokenException(
-                'Cannot initialize a hash context'
-            );
-        }
+        Core::ensureTrue(\is_resource($hmac) || \is_object($hmac), 'Cannot initialize a hash context');
 
         /* Reset file pointer to the beginning of the file after the header */
-        if (\fseek($inputHandle, Core::HEADER_VERSION_SIZE, SEEK_SET) === false) {
+        if (\fseek($inputHandle, Core::HEADER_VERSION_SIZE, SEEK_SET) === -1) {
             throw new Ex\IOException(
                 'Cannot read seek within input file'
             );
         }
 
         /* Seek to the start of the actual ciphertext. */
-        if (\fseek($inputHandle, Core::SALT_BYTE_SIZE + $ivsize, SEEK_CUR) === false) {
+        if (\fseek($inputHandle, Core::SALT_BYTE_SIZE + $ivsize, SEEK_CUR) === -1) {
             throw new Ex\IOException(
                 'Cannot seek input file to beginning of ciphertext'
             );
@@ -543,7 +554,7 @@ final class File
         \hash_update($hmac, $header);
         \hash_update($hmac, $file_salt);
         \hash_update($hmac, $iv);
-        /** @var resource $hmac2 */
+        /** @var mixed $hmac2 */
         $hmac2 = \hash_copy($hmac);
 
         $break = false;
@@ -574,13 +585,9 @@ final class File
             \hash_update($hmac, $read);
 
             /* Remember this buffer-sized chunk's HMAC. */
-            /** @var resource $chunk_mac */
+            /** @var mixed $chunk_mac */
             $chunk_mac = \hash_copy($hmac);
-            if (!\is_resource($chunk_mac)) {
-                throw new Ex\EnvironmentIsBrokenException(
-                    'Cannot duplicate a hash context'
-                );
-            }
+            Core::ensureTrue(\is_resource($chunk_mac) || \is_object($chunk_mac), 'Cannot duplicate a hash context');
             $macs []= \hash_final($chunk_mac);
         }
 
@@ -598,7 +605,7 @@ final class File
         /* PASS #2: Decrypt and write output. */
 
         /* Rewind to the start of the actual ciphertext. */
-        if (\fseek($inputHandle, Core::SALT_BYTE_SIZE + $ivsize + Core::HEADER_VERSION_SIZE, SEEK_SET) === false) {
+        if (\fseek($inputHandle, Core::SALT_BYTE_SIZE + $ivsize + Core::HEADER_VERSION_SIZE, SEEK_SET) === -1) {
             throw new Ex\IOException(
                 'Could not move the input file pointer during decryption'
             );
@@ -632,13 +639,9 @@ final class File
              * remembered from pass #1 to ensure attackers didn't change the
              * ciphertext after MAC verification. */
             \hash_update($hmac2, $read);
-            /** @var resource $calc_mac */
+            /** @var mixed $calc_mac */
             $calc_mac = \hash_copy($hmac2);
-            if (!\is_resource($calc_mac)) {
-                throw new Ex\EnvironmentIsBrokenException(
-                    'Cannot duplicate a hash context'
-                );
-            }
+            Core::ensureTrue(\is_resource($calc_mac) || \is_object($calc_mac), 'Cannot duplicate a hash context');
             $calc = \hash_final($calc_mac);
 
             if (empty($macs)) {
@@ -660,11 +663,7 @@ final class File
                 OPENSSL_RAW_DATA,
                 $thisIv
             );
-            if (!\is_string($decrypted)) {
-                throw new Ex\EnvironmentIsBrokenException(
-                    'OpenSSL decryption error'
-                );
-            }
+            Core::ensureTrue(\is_string($decrypted), 'OpenSSL decryption error');
 
             /* Write the plaintext to the output file. */
             self::writeBytes(
@@ -691,18 +690,15 @@ final class File
      *
      * @throws Ex\IOException
      * @throws Ex\EnvironmentIsBrokenException
-     *
-     * @return string
      */
     public static function readBytes($stream, $num_bytes)
     {
-        if ($num_bytes < 0) {
-            throw new Ex\EnvironmentIsBrokenException(
-                'Tried to read less than 0 bytes'
-            );
-        } elseif ($num_bytes === 0) {
+        Core::ensureTrue($num_bytes >= 0, 'Tried to read less than 0 bytes');
+
+        if ($num_bytes === 0) {
             return '';
         }
+
         $buf       = '';
         $remaining = $num_bytes;
         while ($remaining > 0 && ! \feof($stream)) {
@@ -733,8 +729,6 @@ final class File
      * @return int
      *
      * @throws Ex\IOException
-     *
-     * @return string
      */
     public static function writeBytes($stream, $buf, $num_bytes = null)
     {

@@ -117,6 +117,12 @@ Check that the version number in composer.json is correct:
 cat composer.json
 ```
 
+Check that the version number and support lifetime in README.md are correct:
+
+```
+cat README.md
+```
+
 Run the tests:
 
 ```
@@ -148,7 +154,7 @@ make sign-phar
 Tag the release:
 
 ```
-git -c user.signingkey=7B4B2D98 tag -s "<TAG NAME>" -m "<TAG MESSAGE>"
+git -c user.signingkey=DD2E507F7BDB1669 tag -s "<TAG NAME>" -m "<TAG MESSAGE>"
 ```
 
 `<TAG NAME>` should be in the format `v2.0.0` and `<TAG MESSAGE>` should look
