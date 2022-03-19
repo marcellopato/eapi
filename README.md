@@ -1,18 +1,18 @@
 # api
 Create Ecommerce Restful API course
 
-1 - Clone this repository;
-2 - Run `php artisan migrate`;
-3 - Run `composer update`;
-4 - Run `npm install`;
-5 - Run `php artisan passport:install`;
-6 - Run `php artisan db:seed`;
-7 - Run `php artisan serve`;
-8 - Go to your browser at `http://localhost:8000`;
+- Clone this repository;
+- Run `php artisan migrate`;
+- Run `composer update`;
+- Run `npm install`;
+- Run `php artisan passport:install`;
+- Run `php artisan db:seed`;
+- Run `php artisan serve`;
+- Go to your browser at `http://localhost:8000`;
 
 
 ===================
 
-UIRs
+# UIRs
 
-1 - List all products: `http://localhost:8000/api/products`;
+- List all products: `http://localhost:8000/api/products`;
